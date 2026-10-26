@@ -42,7 +42,7 @@ era.
 
 - **Light/Dark:** ✓ Light / ○ Dark
 
-## Colors
+## Colors effects
 
 - **#efe8d8**
 - **#f6f0e2**
