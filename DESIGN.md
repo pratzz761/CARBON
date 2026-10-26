@@ -60,7 +60,7 @@ era.
   Animations, Transitions, Transforms, Gradients, Box Shadows, Text Shadows,
   Border Radius
 
-## Effects
+##  Effects
 
 - Glow
 - Neumorphism
@@ -68,6 +68,6 @@ era.
 - Hover Effects
 - Noise/Grain
 
-## Use Case
+##  Use Case
 
 Brutalism apps, Landing pages, Experimental projects.
