@@ -1,0 +1,9 @@
+services:
+  mongo:
+    image: mongo:8
+    ports:
+      - "127.0.0.1:27017:27017"
+    volumes:
+      - carbon-mongo:/data/db
+volumes:
+  carbon-mongo:
