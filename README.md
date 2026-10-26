@@ -122,3 +122,5 @@ e2e/                       Browser integration tests
 ```
 
 The detailed scope and PDF review are in `PROJECT_PROPOSAL.md`. The original PDF and `DESIGN.md` are preserved.
+#   C A R B O N  
+ 
