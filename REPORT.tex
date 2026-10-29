@@ -1,0 +1,117 @@
+\documentclass[10pt]{article}
+\usepackage[margin=0.82in]{geometry}
+\usepackage{amsmath,amssymb,booktabs,hyperref}
+\title{\textbf{CARBON: Bandwidth-Constrained Synchronisation for Collaborative Notes}}
+\author{Project report}
+\date{October 2026}
+\begin{document}
+\maketitle
+\begin{abstract}
+CARBON is a collaborative plain-text notebook and systems-optimisation experiment. It selects a CRDT update-batching timer that keeps remote edits responsive under a traffic budget. The system uses actual Yjs update sizes, a FIFO relay model, calibration/validation separation, and a convergence invariant. Transient awareness powers coloured remote carets without entering the batching measurements.
+\end{abstract}
+\section{Problem and scope}
+A CRDT makes concurrent replicas converge after updates arrive; it does not decide when a local update leaves the browser. Sending every keystroke pays a fixed framing cost. Batching amortises that cost and may decrease relay queueing, but delays edits. CARBON has $N$ replicas and chooses one timer $T$. The timer starts at the first pending edit and never resets. $T=0$ is immediate sending; the 16 KiB cap is a fixed safety guard. Reliable delivery and final state equality are hard correctness requirements, not objective terms.
+
+\section{Model}
+Scenario $\omega$ contains an edit trace and a relay profile. Edit $j$ appears at $t_j$ and has byte size $s_j$. Batch $b$ opens at $a_b$ and flushes at
+\begin{equation}
+f_b=\min\left(a_b+T,\inf\left\{t\ge a_b:\sum_{j:a_b\le t_j\le t}s_j\ge S\right\}\right).
+\end{equation}
+A run-length approximation is $P_b=s_0r_b+s_1m_b$, with $m_b$ edits and $r_b$ contiguous runs. The implementation instead computes $P_b$ from the actual \texttt{Y.mergeUpdates} result.
+
+Let $H$ be frame overhead, $R$ FIFO capacity in bytes/s and $d$ propagation delay. With batches in flush order,
+\begin{align}
+\sigma_b&=(H+P_b)/R,\\
+W_1&=0,\quad W_{b+1}=\max\{0,W_b+\sigma_b-(f_{b+1}-f_b)\}.
+\end{align}
+Remote-visible delay is
+\begin{equation}
+D_j(T;\omega)=(f_b-t_j)+W_b+\sigma_b+d.
+\end{equation}
+The components are batching, queueing, serialisation and propagation. The first rises with $T$; the first two communication terms may fall as batches get larger.
+
+\clearpage
+\section{Constrained finite optimisation}
+Let $L_{0.95}(T;\omega)$ be empirical remote-edit p95. With relay fan-out $\phi$ and fixed input duration $\Theta$, offered traffic is
+\begin{equation}
+r(T;\omega)=\frac{\phi\sum_b(H+P_b)}{\Theta/1000}\quad\mathrm{bytes/s}.
+\end{equation}
+This counts post-trace flushing; capacity-capped output would conceal overload. CARBON enumerates $\mathcal T=\{0,10,\ldots,300\}$ ms:
+\begin{align}
+\min_{T\in\mathcal T}\quad&\max_{\omega\in\Omega_{\rm train}}L_{0.95}(T;\omega)\\
+\text{s.t.}\quad&r(T;\omega)\le B,\quad L_{0.95}(T;\omega)\le L_{\max},\\
+&C(T;\omega)=1\qquad\forall\omega\in\Omega_{\rm train}.
+\end{align}
+$C$ asserts final replica convergence. $B$ is 80\% of configured capacity, $L_{\max}=500$ ms, and ties prefer lower traffic then smaller $T$. Held-out validation never influences selection.
+
+The wider formulation has $x=(T,S)$ and
+\begin{equation}
+J(x)=K^{-1}\sum_i\left[w_bB(x;\omega_i)/B_0(\omega_i)+
+w_lL_{0.95}(x;\omega_i)/L_{\rm SLO}\right].
+\end{equation}
+Fixing $S$ makes CARBON's enumeration exact over its stated alternatives and more understandable than an unnecessary heuristic.
+
+\section{Analytic reference}
+For one Poisson sender of rate $\lambda$, negligible queueing, fixed cost $\kappa$ and marginal cost $\tilde s$,
+\begin{equation}
+\operatorname{messageRate}(T)=\frac{\lambda}{1+\lambda T},\qquad
+\beta(T)=\phi\left[\lambda\tilde s+\frac{\lambda\kappa}{1+\lambda T}\right].
+\end{equation}
+Thus
+\begin{equation}
+\frac{\beta(T)}{\beta(0)}=\frac{\tilde s+\kappa/(1+\lambda T)}{\kappa+\tilde s}.
+\end{equation}
+At low rate $L_{0.95}(T)\approx T+c_{\rm net}$ and the weighted reference is
+\begin{equation}
+T_{\rm unc}^*=\frac{\left[\sqrt{\frac{w_b\lambda\kappa L_{\rm SLO}}
+{w_l(\kappa+\tilde s)}}-1\right]_+}{\lambda}.
+\end{equation}
+The constrained reference takes the minimum of this, $L_{\rm SLO}-c_{\rm net}$ and $T_{\max}$. It validates the light-load simulator but does not claim to optimise bursty multi-user traces.
+
+\clearpage
+\section{Algorithm and architecture}
+For every timer candidate, the browser generates or captures identical calibration/validation Yjs traces, batches actual updates, and checks a quiescent replica against the unbatched reference. Python replays batches through FIFO egress once per remote recipient and returns p95, rate, message count, maximum queue, final drain, feasibility and convergence. The selector rejects infeasible candidates and chooses the lexicographically best calibration result.
+
+React/Vite/TypeScript renders CodeMirror bound to Yjs. FastAPI relays binary document updates and persists independent coalesced groups to MongoDB or SQLite. Reconnecting clients receive history, then return merged local state; Yjs makes duplicate update delivery safe.
+
+A separate Yjs Awareness channel carries a name, deterministic colour and cursor/selection state. FastAPI relays it only while a session exists; it is neither persisted nor included in the experiment. The matching avatar, labelled caret and selection colour make simultaneous editing unmistakable in a demonstration.
+
+\begin{table}[h]
+\centering
+\caption{Controlled measurement boundary.}
+\begin{tabular}{ll}
+\toprule
+Included & Excluded\\
+\midrule
+Merged Yjs payload bytes & Client upload and initial sync\\
+FIFO relay, fan-out, frame size & Awareness/presence traffic\\
+Queue, propagation, final drain & TCP/TLS/IP and retransmission\\
+Final CRDT convergence & Packet-level wire-byte claims\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section{Evaluation protocol}
+Sample typing uses deterministic steady and burst/paste traces. Recorded typing is split into calibration and validation and stops if a remote update arrives, since asynchronous causal timing is not inferred by this simple capture model. Every candidate sees equal trace inputs. We compare immediate sending, a fixed 100 ms baseline and the selected timer. A no-feasible-candidate result is reported honestly rather than replaced with a decorative optimum.
+
+\clearpage
+\section{Reproduction, deployment and limitations}
+On Linux, install Node.js 22+ and Python 3.11+, run \texttt{npm ci}, create a virtual environment, install \texttt{backend/requirements.txt}, and run the frontend, backend and build tests listed in the README. Two browser windows must open the same room link to show convergence and remote carets.
+
+The repository's multi-stage Dockerfile builds the Vite frontend and serves it through FastAPI. One Render Web Service can host static client, API and WebSocket on one HTTPS origin; the browser therefore uses \texttt{wss}. A hosted MongoDB URI is needed for durable public data. One service instance is required because live rooms and awareness are in memory.
+
+The FIFO model has fixed capacity and propagation, not time-varying loss, browser scheduling, multi-hop routing or packet-level accounting. Replay p95 is not observed one-way internet latency. These stated limits keep the contribution reproducible: a real collaborative editor plus an exact finite search over a controlled, clearly bounded model.
+
+\clearpage
+\appendix
+\section{Demonstration checklist and reproducibility contract}
+Before demonstrating CARBON, start the single backend/frontend service and confirm its health endpoint. Open a room in two independently named browser windows, place their cursors on separate lines, and type concurrently. The two labelled colours should be visible immediately, while the final text converges in both windows. The experiment should then be shown separately: select a network profile, run the fixed 31-value search, and explain that its selected timer is derived from recorded or deterministic input traces rather than from the coloured caret messages.
+
+The reproducibility contract is: each candidate receives the same trace structure; CRDT payload sizes come from the same Yjs implementation; every FIFO queue drains; and held-out traces cannot influence the choice. Any deployment report should state whether it used the disposable SQLite fallback or hosted MongoDB, the public service's single-instance constraint, and the profile parameters used in the experiment. These details prevent a presentation from overstating a controlled simulation as an unrestricted internet-performance result.
+
+\begin{thebibliography}{9}
+\bibitem{yjs} K. Kevin Jahns, \emph{Yjs document updates}, \url{https://docs.yjs.dev/api/document-updates}.
+\bibitem{fastapi} S. Ram\'irez, \emph{FastAPI WebSockets}, \url{https://fastapi.tiangolo.com/advanced/websockets/}.
+\bibitem{rfc} I. Fette and A. Melnikov, \emph{The WebSocket Protocol}, RFC 6455, 2011.
+\end{thebibliography}
+\end{document}

@@ -33,7 +33,7 @@ export default function Editor({ connection, onCount }: {
       state: EditorState.create({
         doc: connection.text.toString(),
         extensions: [
-          yCollab(connection.text, null),
+          yCollab(connection.text, connection.awareness),
           keymap.of([...yUndoManagerKeymap, ...defaultKeymap]),
           EditorView.lineWrapping,
           EditorView.contentAttributes.of({ 'aria-label': 'Note content', spellcheck: 'true' }),

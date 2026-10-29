@@ -3,7 +3,7 @@ import { ArrowDownToLine, ArrowRight, Check, ChevronLeft, Copy, FileText, FlaskC
 import Editor from './components/Editor'
 import Experiment from './components/Experiment'
 import { api, download, errorMessage } from './lib/api'
-import { Collaboration } from './lib/collaboration'
+import { Collaboration, collaboratorColor } from './lib/collaboration'
 import type { ConnectionInfo, Note } from './types'
 
 const initialInfo: ConnectionInfo = { status: 'connecting', pending: 0, peers: [], session: '', error: null }
@@ -178,7 +178,7 @@ export default function App() {
           {!loading && !visibleNotes.length && <p className="sidebar-empty">{query ? 'No notes match that thought.' : 'Your first page is waiting.'}</p>}
         </nav>
         <div className="sidebar-bottom"><div className="notebook-aside"><span className="tiny-label">A NOTE ON NOTES</span><p>Keep the rough edges.<br />That’s where the<br />good ideas start.</p><span className="aside-scribble">→ keep going</span></div>
-          <label className="identity"><span className="avatar own-avatar">{(name.trim()[0] || 'S').toUpperCase()}</span><span><span className="tiny-label">YOU’RE WRITING AS</span><input aria-label="Your display name" maxLength={30} value={name} onChange={event => setName(event.target.value)} onBlur={() => { if (!name.trim()) setName('Student') }} /></span></label>
+          <label className="identity"><span className="avatar own-avatar" style={{ backgroundColor: collaboratorColor(info.session || name) }}>{(name.trim()[0] || 'S').toUpperCase()}</span><span><span className="tiny-label">YOU’RE WRITING AS</span><input aria-label="Your display name" maxLength={30} value={name} onChange={event => setName(event.target.value)} onBlur={() => { if (!name.trim()) setName('Student') }} /></span></label>
           <span className="storage-note"><span className={`status-dot ${storage ? 'is-online' : ''}`} />{storage === 'mongodb' ? 'MongoDB storage' : storage ? 'Saved on this computer' : 'Connecting to notebook'}</span>
         </div>
       </aside>
@@ -191,7 +191,7 @@ export default function App() {
           <div className="document-scroll"><article className="paper">
             <div className="page-meta"><span>FIELD NOTES <span className="rust">/</span> {noteNumber}</span><span className="document-state" aria-live="polite"><span className={`status-dot ${saved ? 'is-online' : info.status === 'online' ? 'is-saving' : ''}`} />{saved ? 'All changes saved' : info.status === 'online' ? 'Saving changes…' : info.status === 'offline' ? 'Offline · kept in browser' : 'Connecting…'}</span></div>
             <div className="title-row"><textarea aria-label="Note title" className="note-title" value={title} placeholder="Untitled note" rows={2} maxLength={120} disabled={!note} onChange={event => setTitle(event.target.value)} onBlur={saveTitle} onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); event.currentTarget.blur() } }} /><span className="margin-star" aria-hidden="true">✳</span></div>
-            <div className="byline"><span className="tiny-label">A WORK IN PROGRESS</span><span className="contributors"><span className="avatar-stack"><span className="avatar tiny-avatar" title={`${name || 'Student'} (you)`}>{(name[0] || 'S').toUpperCase()}</span>{others.slice(0, 3).map((peer, i) => <span key={peer.id} className={`avatar tiny-avatar peer-${i % 3}`} title={peer.name}>{peer.name[0]?.toUpperCase() || 'S'}</span>)}</span><span>{others.length ? `${others.length + 1} writing together` : 'Just you, for now'}</span></span></div>
+            <div className="byline"><span className="tiny-label">A WORK IN PROGRESS</span><span className="contributors"><span className="avatar-stack"><span className="avatar tiny-avatar" style={{ backgroundColor: collaboratorColor(info.session || name) }} title={`${name || 'Student'} (you)`}>{(name[0] || 'S').toUpperCase()}</span>{others.slice(0, 3).map(peer => <span key={peer.id} className="avatar tiny-avatar" style={{ backgroundColor: collaboratorColor(peer.id) }} title={peer.name}>{peer.name[0]?.toUpperCase() || 'S'}</span>)}</span><span>{others.length ? `${others.length + 1} writing together` : 'Just you, for now'}</span></span></div>
             {info.error && <p className="inline-error" role="alert">{info.error}</p>}
             {connection ? <Editor connection={connection} onCount={(wordCount, charCount) => { setWords(wordCount); setCharacters(charCount) }} /> : <div className="editor-loading">Finding a fresh sheet…</div>}
             <div className="page-end"><span className="page-end-line" /><span>THERE’S ALWAYS ROOM FOR ONE MORE THOUGHT.</span><span className="page-end-line" /></div>
