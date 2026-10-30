@@ -1,49 +1,49 @@
 # CARBON — bandwidth-aware shared notes
 
-CARBON is a real-time plain-text notebook for study groups. It pairs a working CRDT editor with a reproducible optimisation experiment: choose an update-batching interval that keeps remote edits responsive while respecting a collaboration-traffic budget.
+CARBON is a real-time plain-text notebook for study groups. It pairs a working CRDT editor with a reproducible optimisation experiment: choose an update-batching interval that keeps remote edits responsive without overwhelming the relay.
 
-The stack is React, Vite and TypeScript with CodeMirror + Yjs; FastAPI provides the HTTP/WebSocket relay; MongoDB or local SQLite stores metadata and CRDT update history. One FastAPI process serves the production client, API and WebSocket endpoint.
+The stack is React, Vite and TypeScript with CodeMirror + Yjs; FastAPI provides the HTTP/WebSocket relay; MongoDB or local SQLite stores metadata and CRDT update history. One FastAPI process serves the API and the note room relay.
 
 ## Problem
 
-Every immediate keystroke update pays CRDT and WebSocket framing overhead. Combining nearby Yjs updates amortises that cost and can shrink their encoded payload, but makes the first edit wait. CARBON studies this explicit byte-versus-remote-visibility trade-off without changing CRDT correctness.
+Every immediate keystroke update pays CRDT and WebSocket framing overhead. Combining nearby Yjs updates amortises that cost and can shrink their encoded payload, but makes the first edit wait. CARBON frames this as a constrained timer-selection problem.
 
-For \(N\) replicas sharing a note, choose a timer \(T\) from a finite set. \(T=0\) means immediate transmission. A timer begins with the first pending local edit and never resets as later edits arrive. The 16 KiB buffer cap is a safety guard, not an optimised decision. Yjs convergence is a hard invariant: after reliable delivery and queue drain, every replica must have identical state.
+For $N$ replicas sharing a note, choose a timer $T$ from a finite set. $T=0$ means immediate transmission. A timer begins with the first pending local edit and never resets as later edits arrive; the batch closes when the timer expires or the content threshold is reached.
 
 ## Mathematical formulation
 
-In scenario \(\omega\), edit \(j\) is created at \(t_j\) by author \(k_j\) and has encoded size \(s_j\). A batch \(b\) opens at \(a_b\). Let \(H\) be WebSocket framing overhead, \(R\) relay capacity in bytes/s, \(d\) one-way propagation delay, \(\phi\) relay fan-out and \(\Theta\) fixed trace duration. With byte cap \(S\), it flushes at
+In scenario $\omega$, edit $j$ is created at $t_j$ by author $k_j$ and has encoded size $s_j$. A batch $b$ opens at $a_b$. Let $H$ be WebSocket framing overhead, $R$ relay capacity, $S$ the size trigger and $d$ propagation delay. A batch closes at
 
-\[
+$$
 f_b=\min\left(a_b+T,\inf\left\{t\ge a_b:\sum_{j:a_b\le t_j\le t}s_j\ge S\right\}\right).
-\]
+$$
 
-The theoretical run-length model is \(P_b=s_0r_b+s_1m_b\), where \(m_b\) is edits and \(r_b\) contiguous editing runs. The real replay replaces it with the actual byte length from \(`Y.mergeUpdates`\).
+The theoretical run-length model is $P_b=s_0r_b+s_1m_b$, where $m_b$ is edits and $r_b$ contiguous editing runs. The real replay replaces it with the actual byte length from `Y.mergeUpdates` and the encoded update trunk.
 
 The server-to-peer egress queue is FIFO:
 
-\[
+$$
 \sigma_b=\frac{H+P_b}{R},\qquad
 W_1=0,\qquad W_{b+1}=\max\{0,W_b+\sigma_b-(f_{b+1}-f_b)\}.
-\]
+$$
 
-For an edit carried by batch \(b\), remote-visible delay is
+For an edit carried by batch $b$, remote-visible delay is
 
-\[
+$$
 D_j(T;\omega)=(f_b-t_j)+W_b+\sigma_b+d.
-\]
+$$
 
 The terms represent batching, queueing, serialisation and propagation. Batching increases the first term, but can decrease fixed overhead and queue delay.
 
-Let \(L_{0.95}(T;\omega)\) be empirical p95 remote delay. Offered traffic is measured before capacity limiting and includes batches drained after the last input:
+Let $L_{0.95}(T;\omega)$ be empirical p95 remote delay. Offered traffic is measured before capacity limiting and includes batches drained after the last input:
 
-\[
+$$
 r(T;\omega)=\frac{\phi\sum_b(H+P_b)}{\Theta/1000}\quad\text{bytes/s}.
-\]
+$$
 
-For calibration scenarios \(\Omega_{train}\), CARBON exactly searches the finite problem
+For calibration scenarios $\Omega_{train}$, CARBON exactly searches the finite problem
 
-\[
+$$
 \begin{aligned}
 \underset{T\in\{0,10,\ldots,300\}}{\operatorname{minimise}}\;&
 \max_{\omega\in\Omega_{train}}L_{0.95}(T;\omega)\\
@@ -52,43 +52,43 @@ L_{0.95}(T;\omega)\le L_{max},\\
 &\operatorname{converge}(T;\omega)=\mathrm{true}
 \quad\forall\omega\in\Omega_{train}.
 \end{aligned}
-\]
+$$
 
-\(B\) is 80% of selected relay capacity and \(L_{max}=500\) ms is a stated project target. Ties use lower offered rate then smaller \(T\). Held-out validation results are never used in selection.
+$B$ is 80% of selected relay capacity and $L_{max}=500$ ms is a stated project target. Ties use lower offered rate then smaller $T$. Held-out validation results are never used in selection.
 
-The broader supplied formulation admits \(x=(T,S)\) and weighted sample average
+The broader supplied formulation admits $x=(T,S)$ and weighted sample average
 
-\[
+$$
 J(x)=\frac1K\sum_i\left[
-w_b\frac{B(x;\omega_i)}{B_0(\omega_i)}+
-w_l\frac{L_{0.95}(x;\omega_i)}{L_{SLO}}\right].
-\]
+ w_b\frac{B(x;\omega_i)}{B_0(\omega_i)}+
+ w_l\frac{L_{0.95}(x;\omega_i)}{L_{SLO}}\right].
+$$
 
-CARBON fixes \(S\), so enumeration is exact over its 31 declared alternatives.
+CARBON fixes $S$, so enumeration is exact over its 31 declared alternatives.
 
 ### Analytic benchmark
 
-For a single Poisson sender of rate \(\lambda\), negligible queueing, and effective fixed/marginal batch costs \(\kappa,\tilde s\),
+For a single Poisson sender of rate $\lambda$, negligible queueing, and effective fixed/marginal batch costs $\kappa,\tilde s$,
 
-\[
+$$
 \operatorname{messageRate}(T)=\frac{\lambda}{1+\lambda T},\qquad
 \beta(T)=\phi\left[\lambda\tilde s+\frac{\lambda\kappa}{1+\lambda T}\right].
-\]
+$$
 
 Consequently,
 
-\[
+$$
 \frac{\beta(T)}{\beta(0)}
 =\frac{\tilde s+\kappa/(1+\lambda T)}{\kappa+\tilde s}.
-\]
+$$
 
-With low-rate \(L_{0.95}(T)\approx T+c_{net}\), the weighted reference is
+With low-rate $L_{0.95}(T)\approx T+c_{net}$, the weighted reference is
 
-\[
+$$
 T_{unc}^*=\frac{\left[\sqrt{\frac{w_b\lambda\kappa L_{SLO}}
 {w_l(\kappa+\tilde s)}}-1\right]_+}{\lambda},\qquad
 T^*=\min(T_{unc}^*,L_{SLO}-c_{net},T_{max}).
-\]
+$$
 
 This is a validation benchmark only: actual Yjs merging, bursty traces, fan-out and queueing make the measured objective non-smooth.
 
@@ -100,13 +100,13 @@ This is a validation benchmark only: actual Yjs merging, bursty traces, fan-out 
 4. Reject infeasible candidates; select the best calibration result lexicographically.
 5. Report validation results unchanged.
 
-The model includes batching, queueing, serialisation, propagation, relay fan-out and unmasked/unfragmented WebSocket framing. It excludes client upload, presence/cursor traffic, initial sync, database traffic, TCP/TLS/IP overhead, retransmission and packet coalescing. The selected preset does not throttle the live editor.
+The model includes batching, queueing, serialisation, propagation, relay fan-out and unmasked/unfragmented WebSocket framing. It excludes client upload, presence/cursor traffic, initial sync, database persistence and any production-scale optimisation not being benchmarked.
 
 ## Collaboration demo
 
-Click **Share note** and open the identical URL in another browser/device. Each user chooses a display name. Connected users receive a stable colour; their avatar, labelled remote caret and selection share it. These transient Yjs Awareness messages are neither persisted nor counted as document traffic.
+Click **Share note** and open the identical URL in another browser/device. Each user chooses a display name. Connected users receive a stable colour; their avatar, labelled remote caret and selection markers are visible in the paper.
 
-The browser retains a recovery copy. The server durably acknowledges document-update groups, provides history before subscription, and accepts merged offline state on reconnect. This is intentionally a **single-process** relay; do not run multiple workers without shared room/presence infrastructure.
+The browser retains a recovery copy. The server durably acknowledges document-update groups, provides history before subscription, and accepts merged offline state on reconnect. This is intentionally designed to be a lightweight real-time study environment rather than a full document platform.
 
 ## Linux setup
 
@@ -134,7 +134,7 @@ python -m uvicorn backend.main:app --host 127.0.0.1 --port 8000
 npm run dev
 ```
 
-For a trusted LAN demo, bind both processes to `0.0.0.0` and use the host LAN IP. To use MongoDB locally, run `docker compose up -d`, copy `.env.example` to `.env`, set `MONGODB_URI=mongodb://127.0.0.1:27017`, then restart FastAPI.
+For a trusted LAN demo, bind both processes to `0.0.0.0` and use the host LAN IP. To use MongoDB locally, run `docker compose up -d`, copy `.env.example` to `.env`, set `MONGODB_URI=mongodb://127.0.0.1:27017/carbon`, and restart the backend.
 
 ## Verify
 
@@ -157,7 +157,7 @@ The included `Dockerfile` builds Vite and serves it from FastAPI, keeping HTTP a
 4. Open `https://<service>.onrender.com/?note=welcome`, click **Share note**, and open that URL in another browser/device.
 5. For persistent data, add hosted MongoDB `MONGODB_URI` as a Render environment variable. Without it, SQLite is only suitable for a disposable demo because a container filesystem can be replaced.
 
-Keep one service instance. Free Render services can sleep after inactivity; open the URL before presenting and wait for `/api/health`. See Render’s [FastAPI deployment](https://render.com/docs/deploy-fastapi), [WebSocket support](https://render.com/docs/websocket), and [free-service behaviour](https://render.com/docs/your-first-deploy).
+Keep one service instance. Free Render services can sleep after inactivity; open the URL before presenting and wait for `/api/health`. See Render’s [FastAPI deployment](https://render.com/docs/deploy-fastapi-app) guide for the general pattern.
 
 ## Agent setup prompt
 
@@ -174,7 +174,7 @@ experiment. Explain that two browsers must use the same Share note URL.
 
 ## Report and layout
 
-The five-page arXiv-style report is [REPORT.pdf](REPORT.pdf); editable source: [REPORT.tex](REPORT.tex). `PROJECT_PROPOSAL.md` records scope and the supplied-formulation review; `DESIGN.md` is the visual source of truth.
+The five-page arXiv-style report is [REPORT.pdf](REPORT.pdf); editable source: [REPORT.tex](REPORT.tex). `PROJECT_PROPOSAL.md` records scope and the supplied-formulation review; `DESIGN.md` is the design note.
 
 ```text
 src/lib/collaboration.ts  Yjs transport, recovery, batching and awareness
