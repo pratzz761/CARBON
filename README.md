@@ -44,10 +44,10 @@ For calibration scenarios $\Omega_{train}$, CARBON exactly searches the finite p
 
 ```math
 \begin{aligned}
-\underset{T \in \{0, 10, \ldots, 300\}}{\operatorname{minimise}} \quad & \max_{\omega \in \Omega_{train}} L_{0.95}(T;\omega) \\
+\underset{T \in \{0, 10, \ldots, 300\}}{\mathrm{minimise}} \quad & \max_{\omega \in \Omega_{train}} L_{0.95}(T;\omega) \\
 \text{subject to} \quad & r(T;\omega) \le B, \\
 & L_{0.95}(T;\omega) \le L_{max}, \\
-& \operatorname{converge}(T;\omega) = \text{true} \quad \forall\, \omega \in \Omega_{train}.
+& \mathrm{converge}(T;\omega) = \text{true} \quad \forall\, \omega \in \Omega_{train}.
 \end{aligned}
 ```
 
@@ -66,7 +66,7 @@ CARBON fixes $S$, so enumeration is exact over its 31 declared alternatives.
 For a single Poisson sender of rate $\lambda$, negligible queueing, and effective fixed/marginal batch costs $\kappa, \tilde{s}$,
 
 ```math
-\operatorname{messageRate}(T) = \frac{\lambda}{1 + \lambda T}, \qquad \beta(T) = \phi \left[ \lambda \tilde{s} + \frac{\lambda \kappa}{1 + \lambda T} \right]
+\mathrm{messageRate}(T) = \frac{\lambda}{1 + \lambda T}, \qquad \beta(T) = \phi \left[ \lambda \tilde{s} + \frac{\lambda \kappa}{1 + \lambda T} \right]
 ```
 
 Consequently,
