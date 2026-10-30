@@ -105,9 +105,11 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .contributors { display: flex; align-items: center; gap: 9px; font-size: 9px; color: var(--muted); }
 .avatar-stack { display: flex; padding-left: 3px; }
 .tiny-avatar { width: 23px; height: 23px; font-size: 8px; margin-left: -3px; background: #c6ccba; border-color: var(--paper); }
-.peer-0 { background: #dbb09a; }.peer-1 { background: #b2c3cb; }.peer-2 { background: #d4c494; }
 .note-editor { min-height: 390px; }
 .cm-editor .cm-scroller { tab-size: 2; }
+.cm-editor .cm-ySelectionCaret { border-left-width: 2px; }
+.cm-editor .cm-ySelectionCaretDot { display: none; }
+.cm-editor .cm-ySelectionInfo { opacity: 1; font-family: 'Courier New', Courier, monospace; font-size: 8px; font-weight: bold; line-height: 1.4; padding: 2px 4px; border-radius: 2px 2px 0 0; }
 .page-end { display: flex; align-items: center; gap: 15px; font-size: 7px; letter-spacing: .8px; color: var(--muted); margin: 46px 0 0; white-space: nowrap; }
 .page-end-line { width: 24px; height: 1px; background: var(--rule); flex: 1; }
 .document-footer { min-height: 45px; border-top: 1px solid var(--rule); padding: 12px 28px; display: flex; align-items: center; justify-content: space-between; gap: 15px; font-size: 9px; color: var(--muted); }

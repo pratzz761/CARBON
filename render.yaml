@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: carbon-notes
+    runtime: docker
+    plan: free
+    healthCheckPath: /api/health
+    envVars:
+      - key: PORT
+        value: 10000
+      - key: MONGODB_URI
+        sync: false

@@ -41,6 +41,9 @@ class Room:
         self.updates = updates
         self.store = store
         self.peers = {}
+        # Awareness is intentionally transient: it is neither persisted nor part of the
+        # document-update batching experiment.
+        self.awareness = {}
         self.pending = []
         self.lock = asyncio.Lock()
         self.flush_lock = asyncio.Lock()
@@ -188,7 +191,8 @@ async def websocket_room(socket: WebSocket, note_id: str):
         async with room.lock:
             # Holding the room lock prevents a gap between history and subscription.
             await peer.send({"type": "sync", "updates": room.updates,
-                             "note": room.note, "session": session})
+                             "note": room.note, "session": session,
+                             "awareness": list(room.awareness.values())})
             room.peers[session] = peer
             await room.presence()
         while True:
@@ -212,6 +216,16 @@ async def websocket_room(socket: WebSocket, note_id: str):
                 if command.get("type") == "name":
                     peer.name = str(command.get("name", "Student")).strip()[:30] or "Student"
                     await room.presence()
+                elif command.get("type") == "awareness":
+                    update = command.get("update")
+                    if not isinstance(update, str) or len(update) > 16_384:
+                        continue
+                    try:
+                        base64.b64decode(update, validate=True)
+                    except ValueError:
+                        continue
+                    room.awareness[session] = update
+                    await room.broadcast({"type": "awareness", "update": update}, exclude=session)
                 elif command.get("type") == "ping":
                     await peer.send({"type": "pong", "sent_at": command.get("sent_at")})
     except (WebSocketDisconnect, asyncio.TimeoutError, ValueError):
@@ -219,6 +233,7 @@ async def websocket_room(socket: WebSocket, note_id: str):
     finally:
         async with room.lock:
             room.peers.pop(session, None)
+            room.awareness.pop(session, None)
             await room.presence()
 
 

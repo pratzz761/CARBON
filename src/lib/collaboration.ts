@@ -1,9 +1,20 @@
 import * as Y from 'yjs'
+import { Awareness, applyAwarenessUpdate, encodeAwarenessUpdate } from 'y-protocols/awareness'
 import type { ConnectionInfo, Note } from '../types'
 
 export const REMOTE = Symbol('remote')
 export const RESTORE = Symbol('restore')
+const REMOTE_AWARENESS = Symbol('remote awareness')
 const BUFFER_CAP = 16 * 1024
+const COLLABORATOR_COLOURS = ['#b2452e', '#2e6f95', '#6b7b3d', '#745097', '#b06b1e', '#087e8b']
+
+export function collaboratorColor(id: string) {
+  let hash = 0
+  for (const character of id) hash = (hash * 31 + character.charCodeAt(0)) >>> 0
+  return COLLABORATOR_COLOURS[hash % COLLABORATOR_COLOURS.length]
+}
+
+function transparent(color: string) { return `${color}33` }
 
 export function toBase64(update: Uint8Array) {
   let binary = ''
@@ -17,6 +28,7 @@ export function fromBase64(value: string) {
 export class Collaboration {
   readonly doc = new Y.Doc()
   readonly text = this.doc.getText('notes')
+  readonly awareness = new Awareness(this.doc)
   private socket: WebSocket | null = null
   private disposed = false
   private timer: ReturnType<typeof setTimeout> | null = null
@@ -46,6 +58,12 @@ export class Collaboration {
       this.info.error = 'The browser recovery copy could not be loaded.'
     }
     this.doc.on('update', this.onUpdate)
+    this.awareness.setLocalStateField('user', {
+      name: this.name,
+      color: collaboratorColor(String(this.doc.clientID)),
+      colorLight: transparent(collaboratorColor(String(this.doc.clientID))),
+    })
+    this.awareness.on('update', this.onAwarenessUpdate)
     window.addEventListener('online', this.reconnect)
     window.addEventListener('offline', this.goOffline)
     window.addEventListener('pagehide', this.persist)
@@ -66,6 +84,18 @@ export class Collaboration {
     if (this.windowMs === 0 || size >= BUFFER_CAP) this.flush()
     else if (!this.timer) this.timer = setTimeout(() => this.flush(), this.windowMs)
     this.emit()
+  }
+
+  private onAwarenessUpdate = ({ added, updated, removed }: { added: number[]; updated: number[]; removed: number[] }, origin: unknown) => {
+    if (origin === REMOTE_AWARENESS || this.socket?.readyState !== WebSocket.OPEN) return
+    const changed = added.concat(updated, removed)
+    if (!changed.length) return
+    this.socket.send(JSON.stringify({ type: 'awareness', update: toBase64(encodeAwarenessUpdate(this.awareness, changed)) }))
+  }
+
+  private setIdentity(session = String(this.doc.clientID)) {
+    const color = collaboratorColor(session)
+    this.awareness.setLocalStateField('user', { name: this.name, color, colorLight: transparent(color) })
   }
 
   persist = () => {
@@ -101,6 +131,7 @@ export class Collaboration {
 
   setName(name: string) {
     this.name = name
+    this.setIdentity(this.info.session || undefined)
     if (this.socket?.readyState === WebSocket.OPEN) this.socket.send(JSON.stringify({ type: 'name', name }))
   }
 
@@ -123,6 +154,7 @@ export class Collaboration {
         const message = JSON.parse(event.data)
         if (message.type === 'sync') {
           for (const update of message.updates) Y.applyUpdate(this.doc, fromBase64(update), REMOTE)
+          for (const update of message.awareness ?? []) applyAwarenessUpdate(this.awareness, fromBase64(update), REMOTE_AWARENESS)
           this.windowMs = message.note.window_ms
           this.onNote(message.note)
           this.backoff = 500
@@ -131,6 +163,7 @@ export class Collaboration {
           if (this.timer) clearTimeout(this.timer)
           this.timer = null
           this.emit({ status: 'online', session: message.session, error: null })
+          this.setIdentity(message.session)
           // Resending the merged local state recovers edits made while disconnected.
           // Repeated CRDT information is safe to apply more than once.
           const state = Y.encodeStateAsUpdate(this.doc)
@@ -145,6 +178,8 @@ export class Collaboration {
           this.emit({ error: null })
         } else if (message.type === 'presence') {
           this.emit({ peers: message.peers })
+        } else if (message.type === 'awareness') {
+          applyAwarenessUpdate(this.awareness, fromBase64(message.update), REMOTE_AWARENESS)
         } else if (message.type === 'note') {
           this.flush()
           this.windowMs = message.note.window_ms
@@ -198,6 +233,8 @@ export class Collaboration {
     window.removeEventListener('pagehide', this.persist)
     this.socket?.close()
     this.doc.off('update', this.onUpdate)
+    this.awareness.off('update', this.onAwarenessUpdate)
+    this.awareness.destroy()
     this.doc.destroy()
   }
 }

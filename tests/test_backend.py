@@ -98,6 +98,9 @@ class APITests(unittest.TestCase):
                     second.receive_json()  # sync
                     self.assertEqual(len(second.receive_json()["peers"]), 2)
                     self.assertEqual(len(first.receive_json()["peers"]), 2)
+                    awareness = base64.b64encode(b"cursor-state").decode("ascii")
+                    first.send_json({"type": "awareness", "update": awareness})
+                    self.assertEqual(second.receive_json(), {"type": "awareness", "update": awareness})
                     payload = base64.b64decode("AQID")
                     first.send_bytes((7).to_bytes(4, "big") + payload)
                     self.assertEqual(second.receive_bytes(), payload)

@@ -1,0 +1,7 @@
+node_modules
+.venv
+dist
+data
+test-results
+.git
+.commandcode
