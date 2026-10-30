@@ -14,81 +14,72 @@ For $N$ replicas sharing a note, choose a timer $T$ from a finite set. $T=0$ mea
 
 In scenario $\omega$, edit $j$ is created at $t_j$ by author $k_j$ and has encoded size $s_j$. A batch $b$ opens at $a_b$. Let $H$ be WebSocket framing overhead, $R$ relay capacity, $S$ the size trigger and $d$ propagation delay. A batch closes at
 
-$$
-f_b=\min\left(a_b+T,\inf\left\{t\ge a_b:\sum_{j:a_b\le t_j\le t}s_j\ge S\right\}\right).
-$$
+```math
+f_b = \min\left(a_b + T,\ \inf\left\{ t \ge a_b : \sum_{j:\, a_b \le t_j \le t} s_j \ge S \right\}\right)
+```
 
-The theoretical run-length model is $P_b=s_0r_b+s_1m_b$, where $m_b$ is edits and $r_b$ contiguous editing runs. The real replay replaces it with the actual byte length from `Y.mergeUpdates` and the encoded update trunk.
+The theoretical run-length model is $P_b = s_0 r_b + s_1 m_b$, where $m_b$ is edits and $r_b$ contiguous editing runs. The real replay replaces it with the actual byte length from `Y.mergeUpdates` and the encoded update trunk.
 
 The server-to-peer egress queue is FIFO:
 
-$$
-\sigma_b=\frac{H+P_b}{R},\qquad
-W_1=0,\qquad W_{b+1}=\max\{0,W_b+\sigma_b-(f_{b+1}-f_b)\}.
-$$
+```math
+\sigma_b = \frac{H + P_b}{R}, \qquad W_1 = 0, \qquad W_{b+1} = \max\left\{ 0,\ W_b + \sigma_b - (f_{b+1} - f_b) \right\}
+```
 
 For an edit carried by batch $b$, remote-visible delay is
 
-$$
-D_j(T;\omega)=(f_b-t_j)+W_b+\sigma_b+d.
-$$
+```math
+D_j(T;\omega) = (f_b - t_j) + W_b + \sigma_b + d
+```
 
 The terms represent batching, queueing, serialisation and propagation. Batching increases the first term, but can decrease fixed overhead and queue delay.
 
 Let $L_{0.95}(T;\omega)$ be empirical p95 remote delay. Offered traffic is measured before capacity limiting and includes batches drained after the last input:
 
-$$
-r(T;\omega)=\frac{\phi\sum_b(H+P_b)}{\Theta/1000}\quad\text{bytes/s}.
-$$
+```math
+r(T;\omega) = \frac{\phi \sum_b (H + P_b)}{\Theta / 1000} \quad \text{bytes/s}
+```
 
 For calibration scenarios $\Omega_{train}$, CARBON exactly searches the finite problem
 
-$$
+```math
 \begin{aligned}
-\underset{T\in\{0,10,\ldots,300\}}{\operatorname{minimise}}\;&
-\max_{\omega\in\Omega_{train}}L_{0.95}(T;\omega)\\
-\text{subject to }&r(T;\omega)\le B,\quad
-L_{0.95}(T;\omega)\le L_{max},\\
-&\operatorname{converge}(T;\omega)=\mathrm{true}
-\quad\forall\omega\in\Omega_{train}.
+\underset{T \in \{0, 10, \ldots, 300\}}{\operatorname{minimise}} \quad & \max_{\omega \in \Omega_{train}} L_{0.95}(T;\omega) \\
+\text{subject to} \quad & r(T;\omega) \le B, \\
+& L_{0.95}(T;\omega) \le L_{max}, \\
+& \operatorname{converge}(T;\omega) = \text{true} \quad \forall\, \omega \in \Omega_{train}.
 \end{aligned}
-$$
+```
 
-$B$ is 80% of selected relay capacity and $L_{max}=500$ ms is a stated project target. Ties use lower offered rate then smaller $T$. Held-out validation results are never used in selection.
+$B$ is 80% of selected relay capacity and $L_{max} = 500$ ms is a stated project target. Ties use lower offered rate then smaller $T$. Held-out validation results are never used in selection.
 
-The broader supplied formulation admits $x=(T,S)$ and weighted sample average
+The broader supplied formulation admits $x = (T, S)$ and weighted sample average
 
-$$
-J(x)=\frac1K\sum_i\left[
- w_b\frac{B(x;\omega_i)}{B_0(\omega_i)}+
- w_l\frac{L_{0.95}(x;\omega_i)}{L_{SLO}}\right].
-$$
+```math
+J(x) = \frac{1}{K} \sum_i \left[ w_b \frac{B(x;\omega_i)}{B_0(\omega_i)} + w_l \frac{L_{0.95}(x;\omega_i)}{L_{SLO}} \right]
+```
 
 CARBON fixes $S$, so enumeration is exact over its 31 declared alternatives.
 
 ### Analytic benchmark
 
-For a single Poisson sender of rate $\lambda$, negligible queueing, and effective fixed/marginal batch costs $\kappa,\tilde s$,
+For a single Poisson sender of rate $\lambda$, negligible queueing, and effective fixed/marginal batch costs $\kappa, \tilde{s}$,
 
-$$
-\operatorname{messageRate}(T)=\frac{\lambda}{1+\lambda T},\qquad
-\beta(T)=\phi\left[\lambda\tilde s+\frac{\lambda\kappa}{1+\lambda T}\right].
-$$
+```math
+\operatorname{messageRate}(T) = \frac{\lambda}{1 + \lambda T}, \qquad \beta(T) = \phi \left[ \lambda \tilde{s} + \frac{\lambda \kappa}{1 + \lambda T} \right]
+```
 
 Consequently,
 
-$$
-\frac{\beta(T)}{\beta(0)}
-=\frac{\tilde s+\kappa/(1+\lambda T)}{\kappa+\tilde s}.
-$$
+```math
+\frac{\beta(T)}{\beta(0)} = \frac{\tilde{s} + \kappa / (1 + \lambda T)}{\kappa + \tilde{s}}
+```
 
-With low-rate $L_{0.95}(T)\approx T+c_{net}$, the weighted reference is
+With low-rate $L_{0.95}(T) \approx T + c_{net}$, the weighted reference is
 
-$$
-T_{unc}^*=\frac{\left[\sqrt{\frac{w_b\lambda\kappa L_{SLO}}
-{w_l(\kappa+\tilde s)}}-1\right]_+}{\lambda},\qquad
-T^*=\min(T_{unc}^*,L_{SLO}-c_{net},T_{max}).
-$$
+```math
+T_{unc}^{*} = \frac{\left[ \sqrt{\dfrac{w_b \lambda \kappa L_{SLO}}{w_l (\kappa + \tilde{s})}} - 1 \right]_{+}}{\lambda}, \qquad T^{*} = \min\left( T_{unc}^{*},\ L_{SLO} - c_{net},\ T_{max} \right)
+```
 
 This is a validation benchmark only: actual Yjs merging, bursty traces, fan-out and queueing make the measured objective non-smooth.
 
@@ -157,7 +148,7 @@ The included `Dockerfile` builds Vite and serves it from FastAPI, keeping HTTP a
 4. Open `https://<service>.onrender.com/?note=welcome`, click **Share note**, and open that URL in another browser/device.
 5. For persistent data, add hosted MongoDB `MONGODB_URI` as a Render environment variable. Without it, SQLite is only suitable for a disposable demo because a container filesystem can be replaced.
 
-Keep one service instance. Free Render services can sleep after inactivity; open the URL before presenting and wait for `/api/health`. See Render’s [FastAPI deployment](https://render.com/docs/deploy-fastapi-app) guide for the general pattern.
+Keep one service instance. Free Render services can sleep after inactivity; open the URL before presenting and wait for `/api/health`. See Render's [FastAPI deployment](https://render.com/docs/deploy-fastapi-app) guide for the general pattern.
 
 ## Agent setup prompt
 
@@ -177,10 +168,10 @@ experiment. Explain that two browsers must use the same Share note URL.
 The five-page arXiv-style report is [REPORT.pdf](REPORT.pdf); editable source: [REPORT.tex](REPORT.tex). `PROJECT_PROPOSAL.md` records scope and the supplied-formulation review; `DESIGN.md` is the design note.
 
 ```text
-src/lib/collaboration.ts  Yjs transport, recovery, batching and awareness
-src/components/Editor.tsx CodeMirror/Yjs editor binding
-backend/main.py           HTTP API, WebSocket room relay and ephemeral awareness
-backend/optimizer.py      FIFO evaluation and constrained finite search
-Dockerfile                single-service public deployment
-REPORT.tex                mathematical report source
+src/lib/collaboration.ts   Yjs transport, recovery, batching and awareness
+src/components/Editor.tsx  CodeMirror/Yjs editor binding
+backend/main.py            HTTP API, WebSocket room relay and ephemeral awareness
+backend/optimizer.py       FIFO evaluation and constrained finite search
+Dockerfile                 single-service public deployment
+REPORT.tex                 mathematical report source
 ```
