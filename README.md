@@ -138,17 +138,6 @@ npm run build
 
 Playwright may need `npx playwright install chromium`.
 
-## Minimal live deployment (Render)
-
-The included `Dockerfile` builds Vite and serves it from FastAPI, keeping HTTP and `wss` WebSockets on one origin.
-
-1. Push the repository to GitHub; never commit `.env` or credentials.
-2. In [Render](https://dashboard.render.com/), create a **Web Service**, select the repository and choose the Docker runtime.
-3. Use the Free plan for a short demo, set health check path to `/api/health`, then deploy. The Dockerfile reads Render's `PORT`.
-4. Open `https://<service>.onrender.com/?note=welcome`, click **Share note**, and open that URL in another browser/device.
-5. For persistent data, add hosted MongoDB `MONGODB_URI` as a Render environment variable. Without it, SQLite is only suitable for a disposable demo because a container filesystem can be replaced.
-
-Keep one service instance. Free Render services can sleep after inactivity; open the URL before presenting and wait for `/api/health`. See Render's [FastAPI deployment](https://render.com/docs/deploy-fastapi-app) guide for the general pattern.
 
 ## Agent setup prompt
 
@@ -164,8 +153,6 @@ experiment. Explain that two browsers must use the same Share note URL.
 ```
 
 ## Report and layout
-
-The five-page arXiv-style report is [REPORT.pdf](REPORT.pdf); editable source: [REPORT.tex](REPORT.tex). `PROJECT_PROPOSAL.md` records scope and the supplied-formulation review; `DESIGN.md` is the design note.
 
 ```text
 src/lib/collaboration.ts   Yjs transport, recovery, batching and awareness
